@@ -9,9 +9,9 @@
 Your Claude Code usage limits in the tmux status bar.
 
 ```
-󰚩 Claude 5h:26% 7d:3%          # compact (default)
-󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%       # gauge
-󰚩 ~26%                         # minimal
+󰚩 Claude 5h:26% 7d:3%    # compact (default)
+󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%  # gauge
+󰚩 ~26%                    # minimal
 ```
 
 No switching to the web console. Color-coded at a glance. Zero config to start.
@@ -20,7 +20,7 @@ No switching to the web console. Color-coded at a glance. Zero config to start.
 
 ## Two modes: local (default) vs exact
 
-| | Local | Exact (web API) |
+| | Approximate (local) | Exact (web API) |
 |---|---|---|
 | **Setup** | None - works immediately | Paste a browser session key once |
 | **Data source** | `~/.claude/projects/` JSONL files | Claude.ai web API |
@@ -28,11 +28,15 @@ No switching to the web console. Color-coded at a glance. Zero config to start.
 | **Tiers shown** | 5h only | 5h + 7d + per-model |
 | **Reset times** | Not available | Shown when near limit |
 
-**The `~` prefix means approximate.** Local mode estimates cost from raw token counts using community-sourced price tables. Good enough for "am I close to the limit?" - not guaranteed to match what Anthropic actually counts.
+**The `~` prefix means approximate.** Local mode estimates cost from raw token counts using community-sourced price tables. In practice it can be off by 10-20 percentage points - good enough for "am I close to the limit?" but not something to trust when you're at 80% and wondering if you have headroom.
 
-**No `~` means exact.** When a session key is configured the plugin hits the same endpoint the Claude.ai dashboard uses. Numbers match exactly.
+**Why is it off?** Anthropic's actual usage accounting is opaque. The plugin estimates cost from token counts × hardcoded model prices, but Anthropic may apply discounts, rounding, or count tokens differently (e.g. tool use overhead). The plan limits themselves ($18/$35/$140 per 5h) are community-estimated, not official.
 
-The session key is entirely optional. If you never set it you get local mode forever, which is fine for most people.
+**No `~` means exact.** The session key lets the plugin hit the same internal API the Claude.ai dashboard uses, so the numbers match what Anthropic actually counts. This is the only way to get accurate numbers - the Claude Code OAuth token (`~/.claude/.credentials.json`) only has `user:inference` scope and can't access usage data.
+
+The session key is entirely optional. If you never set it you get local mode forever.
+
+To configure the exact mode, see [exact mode setup](#exact-mode-setup).
 
 ---
 
@@ -63,7 +67,7 @@ The session key is entirely optional. If you never set it you get local mode for
 
 ```tmux
 # ~/.tmux.conf
-set -g @plugin 'your-username/tmux-claude-usage'   # TODO: final repo path
+set -g @plugin 'eljulians/tmux-claude-usage'
 
 # Add placeholder wherever you want it in your status bar
 set -g status-right '#{claude_usage} | %H:%M'
@@ -173,4 +177,11 @@ bash scripts/claude_usage.sh --powerline
 
 ## Local mode accuracy
 
-Local mode uses hardcoded plan limits (Pro: $18, Max5: $35, Max20: $140 per 5h window) and hardcoded model pricing. Both are community-sourced and can drift if Anthropic changes them. The `~` is intentional - it means "close enough to be useful, not precise enough to trust blindly." For exact numbers, set up a session key.
+Local mode uses hardcoded plan limits (Pro: $18, Max5: $35, Max20: $140 per 5h window) and hardcoded model pricing (Opus $15/$75, Sonnet $3/$15, Haiku $0.25/$1.25 per 1M input/output tokens). Both are community-sourced and can drift if Anthropic changes them.
+
+Expect **±10-20 percentage points** versus what the dashboard shows. The gap comes from:
+- Anthropic's actual counting method being undocumented
+- Tool use and system prompt tokens being accounted differently
+- Plan limits being estimated, not confirmed
+
+The `~` is intentional. Set up a session key if you need precision.

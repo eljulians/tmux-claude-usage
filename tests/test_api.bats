@@ -65,26 +65,12 @@ run_fetch_api() {
     # We override by re-running with session key in env
 }
 
-# Override: inject session key by wrapping the script
 run_fetch_with_key() {
     local fixture="${1:-api_response_normal.json}"
-    CLAUDE_USAGE_MOCK_RESPONSE="$fixture" \
-    CLAUDE_USAGE_TEST_ORG_ID="mock-org-uuid-1234" \
-        run bash -c "
-            # Stub get_tmux_option to return session key
-            export _CLAUDE_SESSION_KEY='test-session-key'
-            source '${REPO_DIR}/scripts/helpers.sh'
-            get_tmux_option() {
-                case \"\$1\" in
-                    @claude_usage_session_key) echo 'test-session-key' ;;
-                    @claude_usage_org_id)      echo '' ;;
-                    @claude_usage_plan)        echo 'auto' ;;
-                    *) echo \"\${2:-}\" ;;
-                esac
-            }
-            export -f get_tmux_option
-            bash '${FETCH}'
-        "
+    # Use export to guarantee vars reach the bash subprocess on all platforms.
+    export CLAUDE_USAGE_TEST_SESSION_KEY="test-session-key"
+    export CLAUDE_USAGE_MOCK_RESPONSE="$fixture"
+    run bash "$FETCH"
 }
 
 parse_var() {

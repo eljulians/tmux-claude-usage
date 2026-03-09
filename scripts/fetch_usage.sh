@@ -174,8 +174,12 @@ except:
 _parse_api_json_jq() {
     local body="$1"
     # One value per line to avoid TSV tab-collapsing when fields are empty.
+    # Use while-read instead of mapfile for bash 3.x compatibility (macOS /bin/bash).
     local fields=()
-    mapfile -t fields < <(jq -r '
+    local _line
+    while IFS= read -r _line; do
+        fields+=("$_line")
+    done < <(jq -r '
         def pct(x): if x == null then -1 else (x | if . > 100 then 100 elif . < 0 then 0 else . end | floor) end;
         def rst(x): if x == null then "" else x end;
         pct(.five_hour.utilization),
@@ -186,7 +190,7 @@ _parse_api_json_jq() {
         rst(.seven_day_opus.resets_at),
         pct(.seven_day_sonnet.utilization),
         rst(.seven_day_sonnet.resets_at)
-    ' <<< "$body" 2>/dev/null) || return 1
+    ' <<< "$body" 2>/dev/null)
 
     [[ ${#fields[@]} -lt 8 ]] && return 1
 
@@ -206,28 +210,20 @@ _parse_api_json_python3() {
     # Use env var to pass body - avoids heredoc/stdin conflict and escaping issues.
     # Output one value per line (like jq path) to avoid IFS tab-collapse bug.
     local fields=()
-    mapfile -t fields < <(CLAUDE_USAGE_JSON_BODY="$body" python3 - <<'PYEOF'
-import json, os, sys
-from datetime import datetime, timezone
-
-def parse_ts(ts):
-    if not ts:
-        return ""
-    try:
-        if ts.endswith('Z'):
-            ts2 = ts[:-1].split('.')[0] + '+00:00'
-        elif '+00:00' in ts:
-            ts2 = ts.split('.')[0] + '+00:00'
-        else:
-            ts2 = ts.split('.')[0] + '+00:00'
-        dt = datetime.fromisoformat(ts2)
-        return str(int(dt.timestamp()))
-    except Exception:
-        return ""
+    local _line
+    while IFS= read -r _line; do
+        fields+=("$_line")
+    done < <(CLAUDE_USAGE_JSON_BODY="$body" python3 - <<'PYEOF'
+import json, os
 
 def pct(x):
     if x is None: return -1
     return min(100, max(0, int(x)))
+
+def raw_ts(x):
+    # Return the raw ISO string so bash iso_to_epoch handles conversion,
+    # matching jq's rst() output format.
+    return x or ""
 
 try:
     data = json.loads(os.environ['CLAUDE_USAGE_JSON_BODY'])
@@ -237,20 +233,20 @@ try:
     sn = data.get('seven_day_sonnet') or {}
     values = [
         str(pct(fh.get('utilization'))),
-        parse_ts(fh.get('resets_at')),
+        raw_ts(fh.get('resets_at')),
         str(pct(sd.get('utilization'))),
-        parse_ts(sd.get('resets_at')),
+        raw_ts(sd.get('resets_at')),
         str(pct(op.get('utilization'))),
-        parse_ts(op.get('resets_at')),
+        raw_ts(op.get('resets_at')),
         str(pct(sn.get('utilization'))),
-        parse_ts(sn.get('resets_at')),
+        raw_ts(sn.get('resets_at')),
     ]
     print('\n'.join(values))
 except Exception:
     for i in range(8):
         print('-1' if i % 2 == 0 else '')
 PYEOF
-    ) || return 1
+    )
 
     [[ ${#fields[@]} -lt 8 ]] && return 1
 
@@ -427,6 +423,8 @@ main() {
 
     # Allow tests to force local mode even when a session key is configured
     [[ -n "${CLAUDE_USAGE_TEST_FORCE_LOCAL:-}" ]] && session_key=""
+    # Allow tests to inject a fake session key without a real tmux session
+    [[ -n "${CLAUDE_USAGE_TEST_SESSION_KEY:-}" ]] && session_key="${CLAUDE_USAGE_TEST_SESSION_KEY}"
 
     # Try API first when session key is configured
     if [[ -n "$session_key" ]]; then
