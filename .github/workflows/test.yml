@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install jq
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y jq
+
+      - name: Run tests
+        run: ./tests/bats/bin/bats tests/
