@@ -10,8 +10,8 @@ Your Claude Code usage limits in the tmux status bar.
 
 ```
 󰚩 Claude 5h:26% 7d:3%          # compact (default)
-󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%      # gauge
-󰚩 ~26%                          # minimal
+󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%       # gauge
+󰚩 ~26%                         # minimal
 ```
 
 No switching to the web console. Color-coded at a glance. Zero config to start.
