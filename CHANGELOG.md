@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1
+
+### Bug fixes
+
+- Invalidate cache on config change
+
 ## v0.2.0
 
 ### New Features

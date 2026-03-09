@@ -22,7 +22,18 @@ done
 # ---------------------------------------------------------------------------
 CACHE_SUFFIX=""
 [[ -n "$POWERLINE_FLAG" ]] && CACHE_SUFFIX="-pl"
-CACHE_FILE="/tmp/tmux-claude-usage-${UID}${CACHE_SUFFIX}.cache"
+
+# Include a hash of display-affecting options in the cache filename so that
+# changing format/tiers/etc takes effect immediately without waiting for TTL.
+_cfg_fmt=$(get_tmux_option "@claude_usage_format"     "compact")
+_cfg_trs=$(get_tmux_option "@claude_usage_tiers"      "auto")
+_cfg_rst=$(get_tmux_option "@claude_usage_show_reset" "auto")
+_cfg_ico=$(get_tmux_option "@claude_usage_icon"       "󰚩")
+_cfg_lbl=$(get_tmux_option "@claude_usage_label"      "Claude")
+_cfg_hash=$(printf '%s' "${_cfg_fmt}${_cfg_trs}${_cfg_rst}${_cfg_ico}${_cfg_lbl}" \
+    | cksum | cut -d' ' -f1)
+
+CACHE_FILE="/tmp/tmux-claude-usage-${UID}${CACHE_SUFFIX}-${_cfg_hash}.cache"
 CACHE_TTL=$(get_tmux_option "@claude_usage_cache_seconds" "60")
 
 if [[ -f "$CACHE_FILE" ]]; then

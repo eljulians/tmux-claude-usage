@@ -7,14 +7,12 @@ MAIN="${REPO_DIR}/scripts/claude_usage.sh"
 
 setup() {
     setup_test_dir
-    # Clear the real cache files so tests always see fresh output
-    rm -f /tmp/tmux-claude-usage-"${UID}".cache
-    rm -f /tmp/tmux-claude-usage-"${UID}"-pl.cache
+    # Clear all cache files for this UID (filename now includes a config hash)
+    rm -f /tmp/tmux-claude-usage-"${UID}"-*.cache
 }
 
 teardown() {
-    rm -f /tmp/tmux-claude-usage-"${UID}".cache
-    rm -f /tmp/tmux-claude-usage-"${UID}"-pl.cache
+    rm -f /tmp/tmux-claude-usage-"${UID}"-*.cache
     teardown_test_dir
 }
 
@@ -54,10 +52,10 @@ teardown() {
 }
 
 @test "cache file is created after first run" {
-    # Remove any existing cache
-    rm -f /tmp/tmux-claude-usage-"${UID}".cache
-
     run bash "$MAIN"
     [ "$status" -eq 0 ]
-    [ -f /tmp/tmux-claude-usage-"${UID}".cache ]
+    # Cache filename now includes a config hash: tmux-claude-usage-<UID>-<hash>.cache
+    local found
+    found=$(ls /tmp/tmux-claude-usage-"${UID}"-*.cache 2>/dev/null | grep -v -- '-pl-' | head -1)
+    [ -n "$found" ]
 }
