@@ -7,13 +7,14 @@ MAIN="${REPO_DIR}/scripts/claude_usage.sh"
 
 setup() {
     setup_test_dir
-    # Use a unique cache file per test run to avoid interference
-    export CLAUDE_USAGE_TEST_CACHE="/tmp/tmux-claude-usage-test-$$.cache"
-    rm -f "$CLAUDE_USAGE_TEST_CACHE"
+    # Clear the real cache files so tests always see fresh output
+    rm -f /tmp/tmux-claude-usage-"${UID}".cache
+    rm -f /tmp/tmux-claude-usage-"${UID}"-pl.cache
 }
 
 teardown() {
-    rm -f "$CLAUDE_USAGE_TEST_CACHE"
+    rm -f /tmp/tmux-claude-usage-"${UID}".cache
+    rm -f /tmp/tmux-claude-usage-"${UID}"-pl.cache
     teardown_test_dir
 }
 
@@ -46,9 +47,10 @@ teardown() {
     run bash "$MAIN" --powerline
     pl_out="$output"
 
-    # Powerline output should have no tmux color codes
-    [[ "$pl_out"     != *"#[fg="* ]]
-    [[ "$normal_out" == *"#[fg="* ]] || true  # normal usually has colors
+    # Both modes include fg color codes; powerline omits the trailing #[default]
+    [[ "$pl_out"     == *"#[fg="*     ]]
+    [[ "$pl_out"     != *"#[default]"* ]]
+    [[ "$normal_out" == *"#[fg="*     ]] || true  # normal usually has colors
 }
 
 @test "cache file is created after first run" {

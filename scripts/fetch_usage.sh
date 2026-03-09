@@ -421,6 +421,19 @@ main() {
     local session_key
     session_key=$(get_tmux_option "@claude_usage_session_key" "")
 
+    # If the tmux option value is a variable reference like "$MY_VAR" or "${MY_VAR}",
+    # expand it from the environment. This lets you store the key in a gitignored
+    # secrets file and reference it as: set -g @claude_usage_session_key "$CLAUDE_SESSION_KEY"
+    if [[ "$session_key" == \$* ]]; then
+        local var_name="${session_key#\$}"
+        var_name="${var_name#\{}"
+        var_name="${var_name%\}}"
+        session_key="${!var_name:-}"
+    fi
+
+    # If still unset, check the CLAUDE_USAGE_SESSION_KEY environment variable directly.
+    [[ -z "$session_key" ]] && session_key="${CLAUDE_USAGE_SESSION_KEY:-}"
+
     # Allow tests to force local mode even when a session key is configured
     [[ -n "${CLAUDE_USAGE_TEST_FORCE_LOCAL:-}" ]] && session_key=""
     # Allow tests to inject a fake session key without a real tmux session

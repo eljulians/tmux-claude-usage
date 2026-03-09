@@ -51,13 +51,15 @@ get_color() {
 # Tier rendering
 # ---------------------------------------------------------------------------
 
-# _tier_str PCT RESET_EPOCH APPROX SHOW_GAUGE
+# _tier_str PCT RESET_EPOCH APPROX SHOW_GAUGE [ALLOW_RESET]
 # Returns a string like "▰▰▰▱▱▱▱▱▱▱ ~42%" or "~42%" or "42% RESET 2h3m"
+# ALLOW_RESET=0 suppresses the reset countdown (used by minimal preset).
 _tier_str() {
     local pct="$1"
     local reset_epoch="${2:-}"
     local approx="${3:-1}"
     local show_gauge="${4:-0}"
+    local allow_reset="${5:-1}"
 
     local crit_threshold
     crit_threshold=$(get_tmux_option "@claude_usage_threshold_crit" "95")
@@ -66,14 +68,20 @@ _tier_str() {
     local pfx=""
     [[ "$approx" == "1" ]] && pfx="~"
 
-    # Reset countdown (only shown when at/near limit)
+    # Reset countdown - shown based on @claude_usage_show_reset option:
+    #   auto   (default) - only when pct >= crit threshold
+    #   always           - whenever reset time is available (API mode only)
     local reset_str=""
-    if [[ -n "$reset_epoch" && "$reset_epoch" != "0" && "$pct" -ge "$crit_threshold" ]]; then
+    local show_reset_opt
+    show_reset_opt=$(get_tmux_option "@claude_usage_show_reset" "auto")
+    if [[ "$allow_reset" == "1" && -n "$reset_epoch" && "$reset_epoch" != "0" ]]; then
         local now secs_left
         now=$(current_epoch)
         secs_left=$(( reset_epoch - now ))
         if (( secs_left > 0 )); then
-            reset_str=" RESET $(format_countdown "$secs_left")"
+            if [[ "$show_reset_opt" == "always" || "$pct" -ge "$crit_threshold" ]]; then
+                reset_str=" RESET $(format_countdown "$secs_left")"
+            fi
         fi
     fi
 
@@ -150,17 +158,27 @@ format_output() {
             no_data_text+=" --"
         fi
         if [[ "$powerline" == "--powerline" ]]; then
-            echo "$no_data_text"
+            echo "#[fg=colour244]${no_data_text}"
         else
             echo "#[fg=colour244]${no_data_text}#[default]"
         fi
         return
     fi
 
-    # Decide which tiers to show
+    # Decide which tiers to show.
+    # "auto" (default): show all tiers with non-null data from the API.
+    # Explicit list: "5h 7d 7d_sonnet" etc.
     local tiers_cfg
-    tiers_cfg=$(get_tmux_option "@claude_usage_tiers" "5h 7d")
-    read -ra tiers <<< "$tiers_cfg"
+    tiers_cfg=$(get_tmux_option "@claude_usage_tiers" "auto")
+    local tiers=()
+    if [[ "$tiers_cfg" == "auto" ]]; then
+        [[ "$fh_pct"     -ge 0 ]] && tiers+=("5h")
+        [[ "$sd_pct"     -ge 0 ]] && tiers+=("7d")
+        [[ "$sonnet_pct" -ge 0 ]] && tiers+=("7d_sonnet")
+        [[ "$opus_pct"   -ge 0 ]] && tiers+=("7d_opus")
+    else
+        read -ra tiers <<< "$tiers_cfg"
+    fi
 
     # Determine primary color (based on 5h pct, or 7d if 5h unavailable)
     local primary_pct="$fh_pct"
@@ -173,14 +191,15 @@ format_output() {
     local show_gauge=0    # show ▰▰▰▱▱▱ bar
     local show_prefix=1   # show "5h:" / "7d:" tier labels
     local primary_only=0  # only render the first available tier
+    local allow_reset=1   # show reset countdown (suppressed in minimal)
 
     case "$fmt" in
         gauge)
-            show_gauge=1; show_prefix=0; primary_only=1 ;;
+            show_gauge=1; show_prefix=0; primary_only=1; allow_reset=1 ;;
         minimal)
-            show_gauge=0; show_prefix=0; primary_only=1 ;;
+            show_gauge=0; show_prefix=0; primary_only=1; allow_reset=0 ;;
         compact|*)
-            show_gauge=0; show_prefix=1; primary_only=0 ;;
+            show_gauge=0; show_prefix=1; primary_only=0; allow_reset=1 ;;
     esac
 
     # Build segment parts
@@ -200,19 +219,19 @@ format_output() {
         case "$tier" in
             5h)
                 [[ "$fh_pct" -lt 0 ]] && continue
-                parts+=("${pfx}$(_tier_str "$fh_pct" "$fh_reset" "$approx" "$show_gauge")")
+                parts+=("${pfx}$(_tier_str "$fh_pct" "$fh_reset" "$approx" "$show_gauge" "$allow_reset")")
                 ;;
             7d)
                 [[ "$sd_pct" -lt 0 ]] && continue
-                parts+=("${pfx}$(_tier_str "$sd_pct" "$sd_reset" "$approx" "0")")
+                parts+=("${pfx}$(_tier_str "$sd_pct" "$sd_reset" "$approx" "0" "$allow_reset")")
                 ;;
             7d_opus)
                 [[ "$opus_pct" -lt 0 ]] && continue
-                parts+=("${pfx}$(_tier_str "$opus_pct" "" "$approx" "0")")
+                parts+=("${pfx}$(_tier_str "$opus_pct" "${CLAUDE_7D_OPUS_RESET:-}" "$approx" "0" "$allow_reset")")
                 ;;
             7d_sonnet)
                 [[ "$sonnet_pct" -lt 0 ]] && continue
-                parts+=("${pfx}$(_tier_str "$sonnet_pct" "" "$approx" "0")")
+                parts+=("${pfx}$(_tier_str "$sonnet_pct" "${CLAUDE_7D_SONNET_RESET:-}" "$approx" "0" "$allow_reset")")
                 ;;
         esac
     done
@@ -226,7 +245,7 @@ format_output() {
             empty_text+=" --"
         fi
         if [[ "$powerline" == "--powerline" ]]; then
-            echo "$empty_text"
+            echo "#[fg=colour244]${empty_text}"
         else
             echo "#[fg=colour244]${empty_text}#[default]"
         fi
@@ -244,7 +263,9 @@ format_output() {
     text+=" ${body}"
 
     if [[ "$powerline" == "--powerline" ]]; then
-        echo "$text"
+        # Include fg color code so tmux-powerline's fixed segment color doesn't
+        # override it. No trailing #[default] - powerline handles reset itself.
+        echo "#[fg=${color}]${text}"
     else
         echo "#[fg=${color}]${text}#[default]"
     fi

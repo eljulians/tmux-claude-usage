@@ -95,10 +95,10 @@ FORMAT="${REPO_DIR}/scripts/format.sh"
 # Powerline mode
 # ---------------------------------------------------------------------------
 
-@test "--powerline omits tmux color codes" {
+@test "--powerline includes fg color but no trailing #[default]" {
     run bash "$FORMAT" 42 1 --powerline
     [ "$status" -eq 0 ]
-    [[ "$output" != *"#[fg="* ]]
+    [[ "$output" == *"#[fg="* ]]
     [[ "$output" != *"#[default]"* ]]
 }
 

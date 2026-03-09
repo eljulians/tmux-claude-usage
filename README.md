@@ -1,7 +1,7 @@
 # tmux-claude-usage
 
-[![tests](https://github.com/OWNER/tmux-claude-usage/actions/workflows/test.yml/badge.svg)](https://github.com/OWNER/tmux-claude-usage/actions/workflows/test.yml)
-[![license](https://img.shields.io/github/license/OWNER/tmux-claude-usage?color=blue)](LICENSE)
+[![tests](https://github.com/eljulians/tmux-claude-usage/actions/workflows/test.yml/badge.svg)](https://github.com/eljulians/tmux-claude-usage/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![tmux](https://img.shields.io/badge/tmux-3.0+-1bb91f.svg)](https://github.com/tmux/tmux)
 [![bash](https://img.shields.io/badge/bash-4.0+-4EAA25.svg?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey.svg)](#requirements)
@@ -9,9 +9,9 @@
 Your Claude Code usage limits in the tmux status bar.
 
 ```
-󰚩 Claude 5h:26% 7d:3%    # compact (default)
-󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%  # gauge
-󰚩 ~26%                    # minimal
+󰚩 Claude 5h:26% 7d:3% snt:8%   # compact (default) - all available tiers
+󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%       # gauge
+󰚩 ~26%                          # minimal
 ```
 
 No switching to the web console. Color-coded at a glance. Zero config to start.
@@ -25,8 +25,8 @@ No switching to the web console. Color-coded at a glance. Zero config to start.
 | **Setup** | None - works immediately | Paste a browser session key once |
 | **Data source** | `~/.claude/projects/` JSONL files | Claude.ai web API |
 | **Accuracy** | Approximate (`~26%`) | Exact (`26%`) |
-| **Tiers shown** | 5h only | 5h + 7d + per-model |
-| **Reset times** | Not available | Shown when near limit |
+| **Tiers shown** | 5h only | All tiers your plan has (5h, 7d, per-model) |
+| **Reset times** | Not available | Configurable - at limit or always |
 
 **The `~` prefix means approximate.** Local mode estimates cost from raw token counts using community-sourced price tables. In practice it can be off by 10-20 percentage points - good enough for "am I close to the limit?" but not something to trust when you're at 80% and wondering if you have headroom.
 
@@ -36,7 +36,7 @@ No switching to the web console. Color-coded at a glance. Zero config to start.
 
 The session key is entirely optional. If you never set it you get local mode forever.
 
-To configure the exact mode, see [exact mode setup](#exact-mode-setup).
+To configure exact mode, see [exact mode setup](#exact-mode-setup).
 
 ---
 
@@ -44,7 +44,9 @@ To configure the exact mode, see [exact mode setup](#exact-mode-setup).
 
 - **Zero-setup default** - reads local Claude Code data, no credentials needed
 - **Optional exact mode** - add a browser session key for precise numbers
+- **Auto tier detection** - shows all tiers your plan provides (5h, 7d, per-model sonnet/opus)
 - **Color temperature** - green → yellow → orange → red as usage climbs
+- **Configurable reset countdown** - always visible or only near the limit
 - **Three display presets** - `compact`, `gauge` (with bar), `minimal`
 - **TPM compatible** - install with `set -g @plugin ...`
 - **tmux-powerline compatible** - drop-in segment
@@ -93,12 +95,13 @@ set -g status-right '#(~/.tmux/plugins/tmux-claude-usage/scripts/claude_usage.sh
 ### With tmux-powerline
 
 ```bash
-# Copy the segment to ~/.config/tmux-powerline/segments/ (create if not exists)
+# Copy the segment to the user segments directory (create if needed)
 mkdir -p ~/.config/tmux-powerline/segments/
 cp segments/claude_usage.sh ~/.config/tmux-powerline/segments/
 
-# Add to your powerline theme's right segments:
-# "claude_usage 235 82"
+# Add to your powerline theme's right segments array.
+# Use default_fg_color so the segment's own color coding takes effect:
+# "claude_usage 235 default_fg_color default_separator no_sep_bg_color no_sep_fg_color no_spacing_disable separator_disable"
 ```
 
 ---
@@ -111,10 +114,20 @@ All options are optional - defaults work out of the box.
 # ~/.tmux.conf
 
 # Display preset:
-#   compact  (default) - 󰚩 Claude 5h:26% 7d:3%       multi-tier, no bar
-#   gauge              - 󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%    visual bar, primary tier
-#   minimal            - 󰚩 ~26%                        icon + pct only
+#   compact  (default) - 󰚩 Claude 5h:26% 7d:3% snt:8%   multi-tier, no bar
+#   gauge              - 󰚩 Claude ▰▰▰▱▱▱▱▱▱▱ ~26%        visual bar, primary tier
+#   minimal            - 󰚩 ~26%                           icon + pct only
 set -g @claude_usage_format "compact"
+
+# Tiers to display.
+# "auto" (default) shows all tiers with data from the API.
+# Explicit list overrides: "5h 7d 7d_sonnet 7d_opus"
+set -g @claude_usage_tiers "auto"
+
+# Reset countdown visibility (compact and gauge presets only, never in minimal):
+#   auto   (default) - only shown when usage is at/near the critical threshold
+#   always           - always shown when available (requires API/exact mode)
+set -g @claude_usage_show_reset "auto"
 
 # Gauge bar width (blocks), only used by the gauge preset
 set -g @claude_usage_gauge_width "10"
@@ -155,6 +168,27 @@ set -g @claude_usage_plan "auto"
    ```
 
 The session key expires after weeks to months. When it does, the plugin falls back to local mode automatically and the `~` reappears.
+
+### Keeping the session key out of version control
+
+If your `tmux.conf` is in a public dotfiles repo, store the key in a gitignored secrets file instead:
+
+```bash
+# ~/secrets.sh  (gitignored)
+export CLAUDE_SESSION_KEY="sk-ant-sid01-..."
+```
+
+```bash
+# ~/.zshrc or ~/.bashrc
+source ~/secrets.sh
+```
+
+```tmux
+# ~/.tmux.conf - references the env var, safe to commit
+set -g @claude_usage_session_key "$CLAUDE_SESSION_KEY"
+```
+
+The plugin expands `$VAR_NAME` and `${VAR_NAME}` references in the tmux option, and also checks `CLAUDE_USAGE_SESSION_KEY` directly if the option is unset.
 
 ---
 
