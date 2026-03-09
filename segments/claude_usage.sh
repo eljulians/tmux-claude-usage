@@ -7,7 +7,12 @@
 # Then add to your powerline theme's right segments array:
 #   "claude_usage 235 82 $powerline_right_arrow_symbol 0"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Locate the plugin root: prefer the canonical TPM location, fall back to
+# the directory two levels above this segment file (in-repo usage).
+_PLUGIN_ROOT="${HOME}/.tmux/plugins/tmux-claude-usage"
+if [[ ! -d "$_PLUGIN_ROOT" ]]; then
+    _PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 
 # Called by tmux-powerline to generate the segment's default config file.
 generate_segmentrc() {
@@ -24,7 +29,7 @@ EORC
 # Called by tmux-powerline every refresh to produce segment output.
 # Powerline handles colors and separators; we emit plain text.
 run_segment() {
-    local script="${SCRIPT_DIR}/scripts/claude_usage.sh"
+    local script="${_PLUGIN_ROOT}/scripts/claude_usage.sh"
     if [[ ! -x "$script" ]]; then
         return 1
     fi

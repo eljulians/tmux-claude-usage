@@ -93,7 +93,8 @@ set -g status-right '#(~/.tmux/plugins/tmux-claude-usage/scripts/claude_usage.sh
 ### With tmux-powerline
 
 ```bash
-# Copy the segment
+# Copy the segment to ~/.config/tmux-powerline/segments/ (create if not exists)
+mkdir -p ~/.config/tmux-powerline/segments/
 cp segments/claude_usage.sh ~/.config/tmux-powerline/segments/
 
 # Add to your powerline theme's right segments:
